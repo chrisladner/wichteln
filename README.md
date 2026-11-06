@@ -14,6 +14,9 @@ Eine einzige Datei (`index.html`), kein Server, keine Anmeldung.
 - Der Organisator-Stand (Namen + Links) liegt nur im localStorage seines Geräts.
 - Wird neu ausgelost, zeigen alte Links noch die alte Auslosung. Deshalb steht die Auslosungs-Nr. auf jedem Los.
 
+**Sicherungslink:** Nach dem Auslosen „Sicherungslink an mich schicken“ → `…/#org=<token>` mit `{v, o:1, k, n:[Namen], p:[Index des Beschenkten], g, b, d, m}` (gleiche Verschleierung wie die Lose, ~300 Zeichen). Öffnen oder in „Schon ausgelost? Liste zurückholen“ einfügen stellt die Liste auf jedem Gerät wieder her (gleiche Auslosung, neue Link-Texte mit demselben Inhalt; bereits verschickte Links bleiben gültig). Gibt es auf dem Gerät eine andere Auslosung, kommt eine Rückfrage. Hintergrund: Safari löscht Webseiten-Speicher nach ~7 Tagen ohne Besuch, und eine Home-Bildschirm-App hat am iPhone ihren eigenen Speicher.
+**Home-Bildschirm:** `manifest.webmanifest` + `icon-180/192/512.png` (Rubbellos-Symbol). Vom Home-Bildschirm geöffnet und leer → „Liste zurückholen“ ist gleich aufgeklappt.
+
 **Musik:** Spieluhr-Version von „Stille Nacht“ (Gruber 1818, gemeinfrei) als `stille-nacht.mp3` (31 s, nahtlose Schleife), abgespielt über ein `<audio>`-Element – das startet am iPhone zuverlässig beim ersten Antippen und spielt auch bei Lautlos-Schalter. (Live per Web Audio erzeugt hat sie am iPhone erst nach Aus/An gespielt.) Neu rendern: `node tools/render_music.js` und dann `ffmpeg -y -i tools/stille-nacht.wav -codec:a libmp3lame -b:a 112k stille-nacht.mp3`. Lautstärke steckt in der Datei (`TARGET` im Script), weil das iPhone `audio.volume` ignoriert. Rubbel-Geräusch und Glöckchen laufen weiter über Web Audio. 🔊 oben rechts schaltet alles aus (wird gemerkt).
 
 **Testen:** `.claude/launch.json` → „wichteln“ (Port 8767). `#demo` zeigt ein Beispiel-Los.

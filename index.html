@@ -10,6 +10,9 @@
 <meta property="og:type" content="website">
 <meta property="og:image" content="https://chrisladner.github.io/wichteln/og.png">
 <meta name="theme-color" content="#0c231c">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icon-180.png">
+<meta name="apple-mobile-web-app-title" content="Wichteln">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%F0%9F%8E%81%3C/text%3E%3C/svg%3E">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -124,6 +127,18 @@ details .field{margin-bottom:14px}
 .btn-s.alt{background:#ece0c6; color:var(--ink)}
 .btn-s.icon{width:42px; height:40px; padding:0; display:grid; place-items:center; font-size:17px}
 .btn-s:active{transform:translateY(1px)}
+.backup{margin-top:18px; padding:14px 16px 13px; border-radius:14px; background:#fff7e2; border:1.5px dashed var(--gold)}
+.backup.done{border-style:solid; border-color:var(--line); background:#f6eedc}
+.backup-head{display:flex; justify-content:space-between; align-items:baseline; gap:10px; font-size:15px}
+.backup-head span{color:#8a6a1d; font-weight:700; font-size:13px}
+.backup p{font-size:13.5px; color:var(--ink2); margin:6px 0 11px}
+.backup .backup-warn{font-size:12.5px; margin:9px 0 0}
+.btn-s.gold{display:block; width:100%; padding:12px 14px; background:var(--gold); color:var(--ink)}
+.backup.done .btn-s.gold{background:#ece0c6}
+#toast{position:fixed; z-index:70; left:50%; bottom:max(24px, env(safe-area-inset-bottom)); transform:translate(-50%, 20px); opacity:0; pointer-events:none;
+  background:var(--gold2); color:var(--ink); font-weight:750; font-size:15px; padding:12px 18px; border-radius:999px; box-shadow:0 10px 30px rgba(0,0,0,.35);
+  transition:opacity .25s, transform .25s; max-width:calc(100% - 32px); text-align:center}
+#toast.show{opacity:1; transform:translate(-50%, 0)}
 .drawid{font-size:13px; color:var(--ink2); margin:16px 0 0; padding:12px 14px; background:#f4ead6; border-radius:12px}
 .result .ghost{margin-top:16px; color:var(--ink2); width:100%}
 .footnote{color:rgba(251,244,230,.5); font-size:12.5px; text-align:center; max-width:36ch; margin:22px auto 0}
@@ -184,7 +199,7 @@ details .field{margin-bottom:14px}
 .broken h1{font-size:30px; margin:16px 0 10px}
 .broken p{color:var(--cream-dim); max-width:32ch; margin:0 auto}
 
-#mute{position:fixed; z-index:60; top:max(12px, env(safe-area-inset-top)); right:12px; min-width:42px; height:42px; border-radius:999px; padding:0;
+#mute{position:absolute; z-index:60; top:max(12px, env(safe-area-inset-top)); right:12px; min-width:42px; height:42px; border-radius:999px; padding:0;
   border:1px solid rgba(251,244,230,.2); background:rgba(12,35,28,.6); backdrop-filter:blur(6px); -webkit-backdrop-filter:blur(6px); font-size:18px;
   color:var(--paper); white-space:nowrap}
 #mute.invite{padding:0 15px 0 12px; font-size:15px; font-weight:750; border-color:rgba(243,217,140,.55); background:rgba(29,75,57,.85);
@@ -265,6 +280,17 @@ details .field{margin-bottom:14px}
         <button class="big" id="drawBtn" type="button">🎲 Auslosen</button>
       </div>
       <a class="textlink" href="#demo" target="_blank" rel="noopener">So sieht ein Los aus →</a>
+      <details id="restoreBox" style="margin-top:18px">
+        <summary>Schon ausgelost? Liste zurückholen</summary>
+        <div class="inner">
+          <p class="hint" style="margin:0 0 10px">Öffne einfach deinen Sicherungslink – oder füg ihn hier ein:</p>
+          <div class="row">
+            <input id="restoreIn" placeholder="Sicherungslink einfügen" autocomplete="off" aria-label="Sicherungslink">
+            <button class="add" id="restoreBtn" type="button" aria-label="Liste zurückholen">↩</button>
+          </div>
+          <p class="error" id="restoreErr" role="alert"></p>
+        </div>
+      </details>
     </div>
 
     <div class="card result" id="result" hidden>
@@ -274,7 +300,13 @@ details .field{margin-bottom:14px}
       <div class="progress"><i id="progBar"></i></div>
       <div class="progress-label" id="progLabel"></div>
       <ul class="links" id="links"></ul>
-      <p class="drawid">Auslosung <b id="drawId"></b> – die Nummer steht auch unten auf jedem Los. Die Links sind nur hier auf diesem Gerät gespeichert.</p>
+      <div class="backup" id="backupBox">
+        <div class="backup-head"><b>🔒 Sicherung für dich</b><span id="backupState"></span></div>
+        <p>Schick dir diesen Link einmal selbst – z. B. per WhatsApp an dich oder in die Notizen. Damit holst du diese Liste jederzeit zurück, auch auf einem anderen Gerät, und kannst Links nochmal schicken.</p>
+        <button class="btn-s gold" id="backupBtn" type="button">Sicherungslink an mich schicken</button>
+        <p class="backup-warn">Nicht weitergeben – damit kann man alle Lose öffnen.</p>
+      </div>
+      <p class="drawid">Auslosung <b id="drawId"></b> – die Nummer steht auch unten auf jedem Los.</p>
       <button class="ghost" id="redo" type="button">Ändern &amp; neu auslosen</button>
     </div>
 
@@ -329,6 +361,7 @@ details .field{margin-bottom:14px}
 <audio id="bgm" src="stille-nacht.mp3" loop preload="auto" playsinline></audio>
 <button id="mute" type="button" aria-label="Ton aus" hidden>🔊</button>
 <canvas id="confetti" aria-hidden="true"></canvas>
+<div id="toast" role="status" aria-live="polite"></div>
 
 <script>
 (() => {
@@ -359,15 +392,27 @@ function pack(obj) {
   data.forEach((b, i) => { out[i + 3] = b ^ k(); });
   return b64u(out);
 }
-function unpack(tok) {
+function decodeTok(tok) {
   try {
     const raw = unb64u(decodeURIComponent(tok).trim());
     if (raw.length < 10) return null;
     const k = keystream(raw[0] | raw[1] << 8 | raw[2] << 16);
-    const o = JSON.parse(td.decode(raw.slice(3).map(b => b ^ k())));
-    return (o && o.v === 1 && typeof o.f === 'string' && typeof o.t === 'string') ? o : null;
+    return JSON.parse(td.decode(raw.slice(3).map(b => b ^ k())));
   } catch (e) { return null; }
 }
+// Los eines Wichtels
+function unpack(tok) {
+  const o = decodeTok(tok);
+  return (o && o.v === 1 && typeof o.f === 'string' && typeof o.t === 'string') ? o : null;
+}
+// Sicherung des Organisators: { v, o:1, k, n:[Namen], p:[Index des Beschenkten], g, b, d, m }
+function unpackOrg(tok) {
+  const o = decodeTok(tok);
+  if (!(o && o.v === 1 && o.o === 1 && Array.isArray(o.n) && Array.isArray(o.p) && o.n.length === o.p.length && o.n.length >= 2)) return null;
+  const ok = o.n.every(x => typeof x === 'string') && o.p.every((t, i) => Number.isInteger(t) && t >= 0 && t < o.n.length && t !== i) && new Set(o.p).size === o.p.length;
+  return ok ? o : null;
+}
+const BASE = () => location.href.split(/[?#]/)[0];
 
 /* ---------- Routing ---------- */
 function show(id) { ['viewOrg', 'viewTicket', 'viewBroken'].forEach(v => { $('#' + v).hidden = v !== id; }); $('#mute').hidden = id === 'viewBroken'; window.scrollTo(0, 0); }
@@ -375,6 +420,13 @@ function route() {
   const h = location.hash;
   if (h.startsWith('#l=')) { const o = unpack(h.slice(3)); o ? showTicket(o, false) : (show('viewBroken'), document.title = 'Wichtel-Los'); }
   else if (h === '#demo') showTicket(demoTicket(), true);
+  else if (h.startsWith('#org=')) {
+    const o = unpackOrg(h.slice(5));
+    history.replaceState(null, '', BASE());          // Sicherung nicht in der Adresszeile stehen lassen
+    const ok = o && restoreBackup(o);
+    showOrganizer();
+    toast(!o ? 'Dieser Sicherungslink ist leider kaputt.' : ok ? 'Liste wiederhergestellt ✓' : 'Nichts geändert.');
+  }
   else showOrganizer();
 }
 window.addEventListener('hashchange', route);
@@ -392,7 +444,12 @@ function showOrganizer() {
   renderSetup();
   const draw = store.get(DRAW_KEY);
   if (draw && draw.links) renderResult(draw, false);
-  else { $('#setup').hidden = false; $('#result').hidden = true; }
+  else {
+    $('#setup').hidden = false; $('#result').hidden = true;
+    // Vom Home-Bildschirm geöffnet und noch leer → gleich das Zurückholen anbieten
+    const standalone = navigator.standalone || matchMedia('(display-mode: standalone)').matches;
+    if (standalone && !S.names.length) $('#restoreBox').open = true;
+  }
 }
 
 function bindOrganizer() {
@@ -416,6 +473,8 @@ function bindOrganizer() {
     err(''); S.excl.push([a, b]); saveSetup(); renderSetup();
   };
   $('#drawBtn').onclick = doDraw;
+  $('#restoreBtn').onclick = restoreFromInput;
+  $('#restoreIn').addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); restoreFromInput(); } });
   $('#redo').onclick = () => {
     if (!confirm('Wirklich neu auslosen?\n\nDann müssen ALLE den neuen Link bekommen – die alten Links zeigen noch die alte Auslosung.')) return;
     store.del(DRAW_KEY);
@@ -505,7 +564,7 @@ function doDraw() {
   if (!p) return err('Mit diesen Ausnahmen geht sich keine Auslosung aus. Nimm eine Ausnahme heraus.');
 
   const id = makeId();
-  const base = location.href.split('#')[0];
+  const base = BASE();
   const links = S.names.map((name, i) => {
     const o = { v: 1, k: id, f: name, t: S.names[p[i]] };
     if (S.g) o.g = S.g; if (S.b) o.b = S.b; if (S.d) o.d = S.d; if (S.m) o.m = S.m;
@@ -575,8 +634,65 @@ function renderResult(draw, fresh) {
     li.append(av, who, send, cp); list.append(li);
   });
   update();
+  const paintBackup = () => {
+    $('#backupBox').classList.toggle('done', !!draw.backup);
+    $('#backupState').textContent = draw.backup ? '✓ gesichert' : '';
+    $('#backupBtn').textContent = draw.backup ? 'Nochmal schicken' : 'Sicherungslink an mich schicken';
+  };
+  paintBackup();
+  $('#backupBtn').onclick = async () => {
+    const url = backupUrl(draw);
+    if (!url) return toast('Sicherung ging leider nicht.');
+    const text = '🔒 Wichtel-Sicherung' + (draw.g ? ' – ' + draw.g : '') + ' (Auslosung ' + draw.id + ')\n' +
+      'Nur für mich, nicht weiterleiten! Damit hole ich die Link-Liste zurück.\n\n' + url;
+    let done = false;
+    if (navigator.share) { try { await navigator.share({ text }); done = true; } catch (e) { /* abgebrochen */ } }
+    else if (await copyText(text)) { done = true; toast('Kopiert ✓ – jetzt bei dir speichern'); }
+    if (done) { draw.backup = true; store.set(DRAW_KEY, draw); paintBackup(); }
+  };
   window.scrollTo(0, 0);
   if (fresh) { const r = $('#result').getBoundingClientRect(); confettiBurst(r.left + r.width / 2, r.top + 60, 120); }
+}
+
+/* ---------- Sicherungslink ---------- */
+function backupUrl(draw) {
+  const items = draw.links.map(l => unpack((l.url.split('#l=')[1] || '')));
+  if (!items.length || items.some(x => !x)) return null;
+  const n = items.map(x => x.f), p = items.map(x => n.indexOf(x.t)), f = items[0];
+  if (p.some(i => i < 0)) return null;
+  const o = { v: 1, o: 1, k: draw.id, n, p };
+  if (f.g) o.g = f.g; if (f.b) o.b = f.b; if (f.d) o.d = f.d; if (f.m) o.m = f.m;
+  return BASE() + '#org=' + pack(o);
+}
+function restoreBackup(o) {
+  const prev = store.get(DRAW_KEY);
+  const same = prev && prev.id === o.k;
+  if (prev && prev.links && !same &&
+      !confirm('Auf diesem Gerät gibt es schon eine andere Auslosung (' + prev.id + ').\n\nDurch die Sicherung (' + o.k + ') ersetzen?')) return false;
+  const sent = new Map(same ? prev.links.map(l => [l.name, !!l.sent]) : []);
+  const links = o.n.map((name, i) => {
+    const t = { v: 1, k: o.k, f: name, t: o.n[o.p[i]] };
+    if (o.g) t.g = o.g; if (o.b) t.b = o.b; if (o.d) t.d = o.d; if (o.m) t.m = o.m;
+    return { name, url: BASE() + '#l=' + pack(t), sent: sent.get(name) || false };
+  });
+  store.set(DRAW_KEY, { id: o.k, g: o.g || '', at: Date.now(), links, backup: true });
+  S.names = o.n.slice(); S.g = o.g || ''; S.b = o.b || ''; S.d = o.d || ''; S.m = o.m || '';
+  S.excl = S.excl.filter(x => S.names.includes(x[0]) && S.names.includes(x[1]));
+  saveSetup();
+  return true;
+}
+function restoreFromInput() {
+  const v = $('#restoreIn').value.trim();
+  const tok = v.includes('#org=') ? v.split('#org=')[1] : v;
+  const o = tok && unpackOrg(tok.split(/\s/)[0]);
+  if (!o) { $('#restoreErr').textContent = 'Das ist kein gültiger Sicherungslink.'; return; }
+  $('#restoreErr').textContent = '';
+  if (restoreBackup(o)) { $('#restoreIn').value = ''; showOrganizer(); toast('Liste wiederhergestellt ✓'); }
+}
+let toastTimer = 0;
+function toast(msg) {
+  const t = $('#toast'); t.textContent = msg; t.classList.add('show');
+  clearTimeout(toastTimer); toastTimer = setTimeout(() => t.classList.remove('show'), 3200);
 }
 
 /* ================= LOS ================= */
@@ -631,7 +747,7 @@ function showTicket(o, demo) {
   $('#prizeName').textContent = o.t;
   $('#tYear').textContent = (o.d && /^\d{4}/.test(o.d)) ? o.d.slice(0, 4) : String(new Date().getFullYear());
   $('#tFoot').textContent = 'Los ' + o.k + (o.g ? ' · ' + o.g : '');
-  $('#makeOwn').href = location.href.split('#')[0];
+  $('#makeOwn').href = BASE();
   fillFacts(o);
 
   const openTicket = revealed => {
