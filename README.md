@@ -14,5 +14,7 @@ Eine einzige Datei (`index.html`), kein Server, keine Anmeldung.
 - Der Organisator-Stand (Namen + Links) liegt nur im localStorage seines Geräts.
 - Wird neu ausgelost, zeigen alte Links noch die alte Auslosung. Deshalb steht die Auslosungs-Nr. auf jedem Los.
 
+**Musik:** Spieluhr-Version von „Stille Nacht“ (Gruber 1818, gemeinfrei), live mit Web Audio erzeugt – keine Audiodatei. Startet beim ersten Antippen (Browser-Regel), 🔊 oben rechts schaltet Musik und Ton aus (wird gemerkt). Melodie/Akkorde stehen als `MEL`/`HARM` im Script, Lautstärke `MUSIC_VOL`.
+
 **Testen:** `.claude/launch.json` → „wichteln“ (Port 8767). `#demo` zeigt ein Beispiel-Los.
 **og.png** ist das WhatsApp-Vorschaubild (1200×630, mit Chrome headless gerendert). Die og:image-URL in `index.html` zeigt auf `https://chrisladner.github.io/wichteln/og.png`.

@@ -365,7 +365,7 @@ function unpack(tok) {
 }
 
 /* ---------- Routing ---------- */
-function show(id) { ['viewOrg', 'viewTicket', 'viewBroken'].forEach(v => { $('#' + v).hidden = v !== id; }); $('#mute').hidden = id !== 'viewTicket'; window.scrollTo(0, 0); }
+function show(id) { ['viewOrg', 'viewTicket', 'viewBroken'].forEach(v => { $('#' + v).hidden = v !== id; }); $('#mute').hidden = id === 'viewBroken'; window.scrollTo(0, 0); }
 function route() {
   const h = location.hash;
   if (h.startsWith('#l=')) { const o = unpack(h.slice(3)); o ? showTicket(o, false) : (show('viewBroken'), document.title = 'Wichtel-Los'); }
@@ -716,7 +716,7 @@ function startFoil(onReveal) {
   const finish = () => {
     done = true; down = false; scratchSound(0);
     setRevealed(true);
-    chime();
+    duckMusic(); chime();
     try { navigator.vibrate && navigator.vibrate([25, 60, 40]); } catch (e) {}
     const r = $('#ticket').getBoundingClientRect();
     confettiBurst(r.left + r.width / 2, r.top + r.height * .55, 170);
@@ -744,15 +744,25 @@ function startFoil(onReveal) {
   foilState = { cv };
 }
 
-/* ---------- Ton ---------- */
+/* ---------- Ton & Musik ---------- */
 let muted = !!store.get('wichteln:muted');
-let actx = null, noiseGain = null;
+let actx = null, noiseGain = null, reverbIn = null;
 const muteBtn = $('#mute');
-const paintMute = () => { muteBtn.textContent = muted ? '🔇' : '🔊'; muteBtn.setAttribute('aria-label', muted ? 'Ton an' : 'Ton aus'); };
+const paintMute = () => {
+  muteBtn.textContent = muted ? '🔇' : '🔊';
+  muteBtn.setAttribute('aria-label', muted ? 'Musik und Ton an' : 'Musik und Ton aus');
+  muteBtn.title = muted ? 'Musik an' : 'Musik aus';
+};
 paintMute();
-muteBtn.onclick = () => { muted = !muted; store.set('wichteln:muted', muted); paintMute(); if (!muted) unlockAudio(); else scratchSound(0); };
+muteBtn.onclick = e => {
+  e.stopPropagation();
+  muted = !muted; store.set('wichteln:muted', muted); paintMute();
+  if (muted) { scratchSound(0); stopMusic(); } else { unlockAudio(); startMusic(); }
+};
 function unlockAudio() {
   if (muted) return;
+  // iPhone: auch bei Lautlos-Schalter abspielen (wie ein Video)
+  try { if (navigator.audioSession) navigator.audioSession.type = 'playback'; } catch (e) {}
   try {
     if (!actx) {
       const AC = window.AudioContext || window.webkitAudioContext; if (!AC) return;
@@ -763,8 +773,14 @@ function unlockAudio() {
       const bp = actx.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = 2600; bp.Q.value = .8;
       noiseGain = actx.createGain(); noiseGain.gain.value = 0;
       src.connect(bp).connect(noiseGain).connect(actx.destination); src.start();
+      // Hall für Spieluhr und Glöckchen
+      const len = Math.round(actx.sampleRate * 2.4), ir = actx.createBuffer(2, len, actx.sampleRate);
+      for (let c = 0; c < 2; c++) { const d = ir.getChannelData(c); for (let i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / len, 3.2); }
+      const conv = actx.createConvolver(); conv.buffer = ir;
+      const wet = actx.createGain(); wet.gain.value = .3;
+      conv.connect(wet).connect(actx.destination); reverbIn = conv;
     }
-    if (actx.state === 'suspended') actx.resume();
+    if (actx.state === 'suspended' && document.visibilityState === 'visible') actx.resume();
   } catch (e) {}
 }
 let quietTimer = 0;
@@ -779,14 +795,89 @@ function chime() {
   const t0 = actx.currentTime + .02;
   [1046.5, 1318.5, 1568, 2093, 2637].forEach((f, i) => {
     const t = t0 + i * .085;
-    [[f, 'sine', .16], [f * 2.01, 'sine', .04]].forEach(([fr, type, vol]) => {
+    [[f, .16], [f * 2.01, .04]].forEach(([fr, vol]) => {
       const o = actx.createOscillator(), g = actx.createGain();
-      o.type = type; o.frequency.value = fr;
+      o.frequency.value = fr;
       g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(vol, t + .008); g.gain.exponentialRampToValueAtTime(.0001, t + 1.6);
-      o.connect(g).connect(actx.destination); o.start(t); o.stop(t + 1.7);
+      o.connect(g); g.connect(actx.destination); if (reverbIn) g.connect(reverbIn);
+      o.start(t); o.stop(t + 1.7);
     });
   });
 }
+
+/* Spieluhr: „Stille Nacht“ (F. X. Gruber, 1818 – gemeinfrei), live im Browser erzeugt.
+   Melodie in C-Dur als [MIDI, Achtel], 6/8-Takt, 12 Takte. */
+const EIGHTH = .36, RIT = 1.14;                       // ≈ 55 punktierte Viertel/Min., am Schluss etwas langsamer
+const toSec = x => x <= 60 ? x * EIGHTH : 60 * EIGHTH + (x - 60) * EIGHTH * RIT;
+const MEL = [
+  [67, 1.5], [69, .5], [67, 1], [64, 3],   [67, 1.5], [69, .5], [67, 1], [64, 3],
+  [74, 2], [74, 1], [71, 3],               [72, 2], [72, 1], [67, 3],
+  [69, 2], [69, 1], [72, 1.5], [71, .5], [69, 1],   [67, 1.5], [69, .5], [67, 1], [64, 3],
+  [69, 2], [69, 1], [72, 1.5], [71, .5], [69, 1],   [67, 1.5], [69, .5], [67, 1], [64, 3],
+  [74, 2], [74, 1], [77, 1.5], [74, .5], [71, 1],   [72, 3], [76, 3],
+  [72, 1], [67, 1], [64, 1], [67, 1.5], [65, .5], [62, 1],   [60, 6]
+];
+const HARM = 'C C C C G G C C F F C C F F C C G G C C C G C C'.split(' '); // je halber Takt
+const CHORD = { C: [48, 55, 64], F: [53, 60, 69], G: [55, 62, 65] };
+const SONG = (() => {
+  const ev = []; let x = 0;
+  MEL.forEach(([m, d], i) => { ev.push({ t: toSec(x), m: m + 12, v: .2, d: i === MEL.length - 1 ? 4.5 : 2.6 }); x += d; });
+  HARM.forEach((c, i) => CHORD[c].forEach((m, k) => ev.push({ t: toSec(i * 3 + k), m, v: k ? .055 : .08, d: k ? 1.6 : 2.4 })));
+  ev.sort((a, b) => a.t - b.t);
+  return { ev, len: toSec(72) + 1.6 };
+})();
+const MUSIC_VOL = .65;
+const music = { on: false, bus: null, idx: 0, start: 0, timer: 0 };
+function tine(t, midi, vol, dur, dest) {
+  const f = 440 * Math.pow(2, (midi - 69) / 12);
+  // Grundton + leise Oktave + kurzer metallischer Anschlag wie bei einer Spieluhr-Zunge
+  for (const [mul, v, d] of [[1, vol, dur], [2, vol * .14, dur * .45], [6.27, vol * .3, .16]]) {
+    if (f * mul > 15000) continue;
+    const o = actx.createOscillator(), g = actx.createGain();
+    o.frequency.value = f * mul;
+    g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(v, t + .003); g.gain.exponentialRampToValueAtTime(.0001, t + d);
+    o.connect(g).connect(dest); o.start(t); o.stop(t + d + .05);
+  }
+}
+function startMusic() {
+  if (muted || !actx || music.on || document.visibilityState !== 'visible') return;
+  music.on = true;
+  const bus = actx.createGain(); bus.gain.value = 0; bus.gain.setTargetAtTime(MUSIC_VOL, actx.currentTime, .4);
+  bus.connect(actx.destination); if (reverbIn) bus.connect(reverbIn);
+  music.bus = bus; music.idx = 0; music.start = actx.currentTime + .3;
+  musicTick();
+}
+function musicTick() {
+  if (!music.on) return;
+  const now = actx.currentTime, horizon = now + 1.5;
+  for (;;) {
+    const e = SONG.ev[music.idx], t = music.start + e.t;
+    if (t > horizon) break;
+    if (t > now - .02) tine(t + Math.random() * .01, e.m, e.v * (.9 + Math.random() * .2), e.d, music.bus);
+    if (++music.idx >= SONG.ev.length) { music.idx = 0; music.start += SONG.len; }
+  }
+  music.timer = setTimeout(musicTick, 300);
+}
+function stopMusic() {
+  if (!music.on) return;
+  music.on = false; clearTimeout(music.timer);
+  const bus = music.bus; music.bus = null;
+  if (bus) { bus.gain.setTargetAtTime(0, actx.currentTime, .15); setTimeout(() => { try { bus.disconnect(); } catch (e) {} }, 1500); }
+}
+function duckMusic() {
+  if (!music.bus) return;
+  const g = music.bus.gain, t = actx.currentTime;
+  g.cancelScheduledValues(t); g.setTargetAtTime(MUSIC_VOL * .35, t, .05); g.setTargetAtTime(MUSIC_VOL, t + 1.8, .6);
+}
+// Browser erlauben Ton erst nach einer Berührung → Musik startet beim ersten Antippen
+const kickAudio = () => { if (muted) return; unlockAudio(); startMusic(); };
+['pointerup', 'touchend', 'click', 'keydown'].forEach(ev => document.addEventListener(ev, kickAudio, { passive: true }));
+document.addEventListener('visibilitychange', () => {
+  if (!actx) return;
+  if (document.visibilityState === 'hidden') { try { actx.suspend(); } catch (e) {} }
+  else if (!muted) { try { actx.resume(); } catch (e) {} startMusic(); }
+});
+window.__wichteln = () => ({ state: actx && actx.state, music: music.on, idx: music.idx, events: SONG.ev.length, loop: +SONG.len.toFixed(2), muted });
 
 /* ---------- Konfetti ---------- */
 const conf = { cv: $('#confetti'), parts: [], raf: 0 };
