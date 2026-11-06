@@ -287,7 +287,7 @@ details .field{margin-bottom:14px}
       <div class="gift" aria-hidden="true">🎁</div>
       <p class="eyebrow" id="gEyebrow">Wichteln</p>
       <h1>Dieses Los ist für <span id="gName"></span>.</h1>
-      <p>Bist du das? Dann rubbel dein Los frei – aber so, dass keiner zuschaut! 🤫</p>
+      <p id="gText">Bist du das? Dann rubbel dein Los frei – aber so, dass keiner zuschaut! 🤫</p>
       <button class="big" id="gateYes" type="button">Ja, das bin ich</button>
       <p class="small">Nicht du? Dann bitte gleich wieder zumachen.</p>
     </div>
@@ -640,15 +640,20 @@ function showTicket(o, demo) {
     if (revealed) setRevealed(false);
     else startFoil(() => { if (!demo) store.set(seenKey, true); });
   };
+  const seen = () => !demo && !!store.get(seenKey);
   $('#gateYes').onclick = async () => {
     startMusic(); unlockAudio();
     try { await Promise.race([document.fonts.load('800 30px Fraunces'), new Promise(r => setTimeout(r, 900))]); } catch (e) {}
-    openTicket(false);
+    openTicket(seen());
   };
   $('#again').onclick = () => { $('#details').hidden = true; $('#ticket').classList.remove('revealed'); startFoil(null); };
 
-  if (!demo && store.get(seenKey)) openTicket(true);
-  else { $('#gate').hidden = false; $('#ticketWrap').hidden = true; }
+  // Immer zuerst die Frage „Bist du das?“ – auch bei schon gerubbelten Losen.
+  // Der Tipp darauf ist die Berührung, die der Browser für die Musik braucht.
+  $('#gText').textContent = seen()
+    ? 'Du hast dein Los schon freigerubbelt. Tipp auf den Knopf, dann siehst du es nochmal. 🎵'
+    : 'Bist du das? Dann rubbel dein Los frei – aber so, dass keiner zuschaut! 🤫';
+  $('#gate').hidden = false; $('#ticketWrap').hidden = true;
 }
 
 function setRevealed(animate) {
@@ -834,7 +839,11 @@ function duckMusic() { // nur am Desktop wirksam – iPhone ignoriert audio.volu
   bgm.volume = .35; setTimeout(() => { bgm.volume = 1; }, 1800);
 }
 // Browser erlauben Ton erst nach einer echten Berührung → Musik + Effekte beim ersten Antippen freischalten
-const kickAudio = () => { if (muted) return; startMusic(); unlockAudio(); };
+const kickAudio = e => {
+  if (muted) return;
+  if (e && e.target && e.target.closest && e.target.closest('#mute')) return;   // den Knopf regelt sein eigener Klick
+  startMusic(); unlockAudio();
+};
 ['touchend', 'click', 'keydown'].forEach(ev => document.addEventListener(ev, kickAudio, { passive: true }));
 document.addEventListener('visibilitychange', () => {
   if (document.visibilityState === 'hidden') {
