@@ -14,7 +14,7 @@ Eine einzige Datei (`index.html`), kein Server, keine Anmeldung.
 - Der Organisator-Stand (Namen + Links) liegt nur im localStorage seines Geräts.
 - Wird neu ausgelost, zeigen alte Links noch die alte Auslosung. Deshalb steht die Auslosungs-Nr. auf jedem Los.
 
-**Musik:** Spieluhr-Version von „Stille Nacht“ (Gruber 1818, gemeinfrei), live mit Web Audio erzeugt – keine Audiodatei. Startet beim ersten Antippen (Browser-Regel), 🔊 oben rechts schaltet Musik und Ton aus (wird gemerkt). Melodie/Akkorde stehen als `MEL`/`HARM` im Script, Lautstärke `MUSIC_VOL`.
+**Musik:** Spieluhr-Version von „Stille Nacht“ (Gruber 1818, gemeinfrei) als `stille-nacht.mp3` (31 s, nahtlose Schleife), abgespielt über ein `<audio>`-Element – das startet am iPhone zuverlässig beim ersten Antippen und spielt auch bei Lautlos-Schalter. (Live per Web Audio erzeugt hat sie am iPhone erst nach Aus/An gespielt.) Neu rendern: `node tools/render_music.js` und dann `ffmpeg -y -i tools/stille-nacht.wav -codec:a libmp3lame -b:a 112k stille-nacht.mp3`. Lautstärke steckt in der Datei (`TARGET` im Script), weil das iPhone `audio.volume` ignoriert. Rubbel-Geräusch und Glöckchen laufen weiter über Web Audio. 🔊 oben rechts schaltet alles aus (wird gemerkt).
 
 **Testen:** `.claude/launch.json` → „wichteln“ (Port 8767). `#demo` zeigt ein Beispiel-Los.
 **og.png** ist das WhatsApp-Vorschaubild (1200×630, mit Chrome headless gerendert). Die og:image-URL in `index.html` zeigt auf `https://chrisladner.github.io/wichteln/og.png`.

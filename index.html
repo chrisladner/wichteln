@@ -322,6 +322,7 @@ details .field{margin-bottom:14px}
   </section>
 </main>
 
+<audio id="bgm" src="stille-nacht.mp3" loop preload="auto" playsinline></audio>
 <button id="mute" type="button" aria-label="Ton aus" hidden>🔊</button>
 <canvas id="confetti" aria-hidden="true"></canvas>
 
@@ -636,7 +637,7 @@ function showTicket(o, demo) {
     else startFoil(() => { if (!demo) store.set(seenKey, true); });
   };
   $('#gateYes').onclick = async () => {
-    unlockAudio();
+    startMusic(); unlockAudio();
     try { await Promise.race([document.fonts.load('800 30px Fraunces'), new Promise(r => setTimeout(r, 900))]); } catch (e) {}
     openTicket(false);
   };
@@ -724,7 +725,7 @@ function startFoil(onReveal) {
   };
 
   cv.onpointerdown = e => {
-    if (done) return; e.preventDefault(); unlockAudio();
+    if (done) return; e.preventDefault(); if (actx && actx.state !== 'running') { try { actx.resume(); } catch (_) {} }
     down = true; try { cv.setPointerCapture(e.pointerId); } catch (_) {}
     const p = pos(e); dab(p); last = p; lastT = performance.now();
     $('#scratchHint').hidden = true;
@@ -757,12 +758,12 @@ paintMute();
 muteBtn.onclick = e => {
   e.stopPropagation();
   muted = !muted; store.set('wichteln:muted', muted); paintMute();
-  if (muted) { scratchSound(0); stopMusic(); } else { unlockAudio(); startMusic(); }
+  if (muted) { scratchSound(0); stopMusic(); } else { startMusic(); unlockAudio(); }
 };
+// iPhone: auch bei Lautlos-Schalter abspielen (wie ein Video) – einmal, bevor irgendein Ton erzeugt wird
+try { if (navigator.audioSession) navigator.audioSession.type = 'playback'; } catch (e) {}
 function unlockAudio() {
   if (muted) return;
-  // iPhone: auch bei Lautlos-Schalter abspielen (wie ein Video)
-  try { if (navigator.audioSession) navigator.audioSession.type = 'playback'; } catch (e) {}
   try {
     if (!actx) {
       const AC = window.AudioContext || window.webkitAudioContext; if (!AC) return;
@@ -780,7 +781,9 @@ function unlockAudio() {
       const wet = actx.createGain(); wet.gain.value = .3;
       conv.connect(wet).connect(actx.destination); reverbIn = conv;
     }
-    if (actx.state === 'suspended' && document.visibilityState === 'visible') actx.resume();
+    if (actx.state !== 'running' && document.visibilityState === 'visible') { const r = actx.resume(); if (r && r.catch) r.catch(() => {}); }
+    // altes iOS: ein stummer Mini-Ton innerhalb der Berührung schaltet Web Audio frei
+    const b = actx.createBuffer(1, 1, 22050), s = actx.createBufferSource(); s.buffer = b; s.connect(actx.destination); s.start(0);
   } catch (e) {}
 }
 let quietTimer = 0;
@@ -805,79 +808,34 @@ function chime() {
   });
 }
 
-/* Spieluhr: „Stille Nacht“ (F. X. Gruber, 1818 – gemeinfrei), live im Browser erzeugt.
-   Melodie in C-Dur als [MIDI, Achtel], 6/8-Takt, 12 Takte. */
-const EIGHTH = .36, RIT = 1.14;                       // ≈ 55 punktierte Viertel/Min., am Schluss etwas langsamer
-const toSec = x => x <= 60 ? x * EIGHTH : 60 * EIGHTH + (x - 60) * EIGHTH * RIT;
-const MEL = [
-  [67, 1.5], [69, .5], [67, 1], [64, 3],   [67, 1.5], [69, .5], [67, 1], [64, 3],
-  [74, 2], [74, 1], [71, 3],               [72, 2], [72, 1], [67, 3],
-  [69, 2], [69, 1], [72, 1.5], [71, .5], [69, 1],   [67, 1.5], [69, .5], [67, 1], [64, 3],
-  [69, 2], [69, 1], [72, 1.5], [71, .5], [69, 1],   [67, 1.5], [69, .5], [67, 1], [64, 3],
-  [74, 2], [74, 1], [77, 1.5], [74, .5], [71, 1],   [72, 3], [76, 3],
-  [72, 1], [67, 1], [64, 1], [67, 1.5], [65, .5], [62, 1],   [60, 6]
-];
-const HARM = 'C C C C G G C C F F C C F F C C G G C C C G C C'.split(' '); // je halber Takt
-const CHORD = { C: [48, 55, 64], F: [53, 60, 69], G: [55, 62, 65] };
-const SONG = (() => {
-  const ev = []; let x = 0;
-  MEL.forEach(([m, d], i) => { ev.push({ t: toSec(x), m: m + 12, v: .2, d: i === MEL.length - 1 ? 4.5 : 2.6 }); x += d; });
-  HARM.forEach((c, i) => CHORD[c].forEach((m, k) => ev.push({ t: toSec(i * 3 + k), m, v: k ? .055 : .08, d: k ? 1.6 : 2.4 })));
-  ev.sort((a, b) => a.t - b.t);
-  return { ev, len: toSec(72) + 1.6 };
-})();
-const MUSIC_VOL = .65;
-const music = { on: false, bus: null, idx: 0, start: 0, timer: 0 };
-function tine(t, midi, vol, dur, dest) {
-  const f = 440 * Math.pow(2, (midi - 69) / 12);
-  // Grundton + leise Oktave + kurzer metallischer Anschlag wie bei einer Spieluhr-Zunge
-  for (const [mul, v, d] of [[1, vol, dur], [2, vol * .14, dur * .45], [6.27, vol * .3, .16]]) {
-    if (f * mul > 15000) continue;
-    const o = actx.createOscillator(), g = actx.createGain();
-    o.frequency.value = f * mul;
-    g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(v, t + .003); g.gain.exponentialRampToValueAtTime(.0001, t + d);
-    o.connect(g).connect(dest); o.start(t); o.stop(t + d + .05);
-  }
-}
+/* Musik: Spieluhr „Stille Nacht“ (F. X. Gruber, 1818 – gemeinfrei) als MP3-Schleife (gerendert mit tools/render_music.js).
+   Als <audio> statt Web Audio, weil das am iPhone zuverlässig beim ersten Antippen startet und auch bei Lautlos-Schalter spielt. */
+const bgm = $('#bgm');
+try { if ('mediaSession' in navigator) navigator.mediaSession.metadata = new MediaMetadata({ title: 'Stille Nacht (Spieluhr)', artist: 'Wichteln' }); } catch (e) {}
+let musicWanted = false;
 function startMusic() {
-  if (muted || !actx || music.on || document.visibilityState !== 'visible') return;
-  music.on = true;
-  const bus = actx.createGain(); bus.gain.value = 0; bus.gain.setTargetAtTime(MUSIC_VOL, actx.currentTime, .4);
-  bus.connect(actx.destination); if (reverbIn) bus.connect(reverbIn);
-  music.bus = bus; music.idx = 0; music.start = actx.currentTime + .3;
-  musicTick();
+  if (muted || document.visibilityState !== 'visible') return;
+  musicWanted = true;
+  if (!bgm.paused) return;
+  try { const p = bgm.play(); if (p && p.catch) p.catch(() => {}); } catch (e) {}
 }
-function musicTick() {
-  if (!music.on) return;
-  const now = actx.currentTime, horizon = now + 1.5;
-  for (;;) {
-    const e = SONG.ev[music.idx], t = music.start + e.t;
-    if (t > horizon) break;
-    if (t > now - .02) tine(t + Math.random() * .01, e.m, e.v * (.9 + Math.random() * .2), e.d, music.bus);
-    if (++music.idx >= SONG.ev.length) { music.idx = 0; music.start += SONG.len; }
-  }
-  music.timer = setTimeout(musicTick, 300);
+function stopMusic() { musicWanted = false; bgm.pause(); }
+function duckMusic() { // nur am Desktop wirksam – iPhone ignoriert audio.volume
+  bgm.volume = .35; setTimeout(() => { bgm.volume = 1; }, 1800);
 }
-function stopMusic() {
-  if (!music.on) return;
-  music.on = false; clearTimeout(music.timer);
-  const bus = music.bus; music.bus = null;
-  if (bus) { bus.gain.setTargetAtTime(0, actx.currentTime, .15); setTimeout(() => { try { bus.disconnect(); } catch (e) {} }, 1500); }
-}
-function duckMusic() {
-  if (!music.bus) return;
-  const g = music.bus.gain, t = actx.currentTime;
-  g.cancelScheduledValues(t); g.setTargetAtTime(MUSIC_VOL * .35, t, .05); g.setTargetAtTime(MUSIC_VOL, t + 1.8, .6);
-}
-// Browser erlauben Ton erst nach einer Berührung → Musik startet beim ersten Antippen
-const kickAudio = () => { if (muted) return; unlockAudio(); startMusic(); };
-['pointerup', 'touchend', 'click', 'keydown'].forEach(ev => document.addEventListener(ev, kickAudio, { passive: true }));
+// Browser erlauben Ton erst nach einer echten Berührung → Musik + Effekte beim ersten Antippen freischalten
+const kickAudio = () => { if (muted) return; startMusic(); unlockAudio(); };
+['touchend', 'click', 'keydown'].forEach(ev => document.addEventListener(ev, kickAudio, { passive: true }));
 document.addEventListener('visibilitychange', () => {
-  if (!actx) return;
-  if (document.visibilityState === 'hidden') { try { actx.suspend(); } catch (e) {} }
-  else if (!muted) { try { actx.resume(); } catch (e) {} startMusic(); }
+  if (document.visibilityState === 'hidden') {
+    if (!bgm.paused) { bgm.pause(); musicWanted = true; }
+    if (actx) { try { actx.suspend(); } catch (e) {} }
+  } else if (!muted) {
+    if (musicWanted) startMusic();
+    if (actx) { try { actx.resume(); } catch (e) {} }
+  }
 });
-window.__wichteln = () => ({ state: actx && actx.state, music: music.on, idx: music.idx, events: SONG.ev.length, loop: +SONG.len.toFixed(2), muted });
+window.__wichteln = () => ({ state: actx && actx.state, music: !bgm.paused, t: +bgm.currentTime.toFixed(1), ready: bgm.readyState, muted });
 
 /* ---------- Konfetti ---------- */
 const conf = { cv: $('#confetti'), parts: [], raf: 0 };
