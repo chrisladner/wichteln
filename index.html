@@ -37,7 +37,7 @@ body{
 #snow{z-index:0}
 #confetti{z-index:50}
 main{position:relative; z-index:1; max-width:500px; margin:0 auto;
-  padding:max(26px, env(safe-area-inset-top)) 16px max(40px, env(safe-area-inset-bottom))}
+  padding:calc(max(12px, env(safe-area-inset-top)) + 50px) 16px max(40px, env(safe-area-inset-bottom))}
 [hidden]{display:none !important}
 button{font:inherit; cursor:pointer; color:inherit}
 h1,h2{font-family:var(--display); font-weight:800; letter-spacing:-.015em; margin:0}
@@ -184,11 +184,15 @@ details .field{margin-bottom:14px}
 .broken h1{font-size:30px; margin:16px 0 10px}
 .broken p{color:var(--cream-dim); max-width:32ch; margin:0 auto}
 
-#mute{position:fixed; z-index:60; top:max(12px, env(safe-area-inset-top)); right:12px; width:42px; height:42px; border-radius:50%;
-  border:1px solid rgba(251,244,230,.2); background:rgba(12,35,28,.55); backdrop-filter:blur(6px); -webkit-backdrop-filter:blur(6px); font-size:18px}
+#mute{position:fixed; z-index:60; top:max(12px, env(safe-area-inset-top)); right:12px; min-width:42px; height:42px; border-radius:999px; padding:0;
+  border:1px solid rgba(251,244,230,.2); background:rgba(12,35,28,.6); backdrop-filter:blur(6px); -webkit-backdrop-filter:blur(6px); font-size:18px;
+  color:var(--paper); white-space:nowrap}
+#mute.invite{padding:0 15px 0 12px; font-size:15px; font-weight:750; border-color:rgba(243,217,140,.55); background:rgba(29,75,57,.85);
+  animation:invite 1.8s ease-in-out infinite}
+@keyframes invite{0%,100%{box-shadow:0 0 0 0 rgba(243,217,140,.45)} 50%{box-shadow:0 0 0 9px rgba(243,217,140,0)}}
 
 @media (prefers-reduced-motion: reduce){
-  .gift,.scratch-hint span,.shuffling .chip{animation:none}
+  .gift,.scratch-hint span,.shuffling .chip,#mute.invite{animation:none}
   .ticket-shadow,.details{animation-duration:.01s}
 }
 </style>
@@ -748,18 +752,24 @@ function startFoil(onReveal) {
 /* ---------- Ton & Musik ---------- */
 let muted = !!store.get('wichteln:muted');
 let actx = null, noiseGain = null, reverbIn = null;
-const muteBtn = $('#mute');
+const muteBtn = $('#mute'), bgm = $('#bgm');
+// Der Knopf zeigt, was wirklich passiert: 🔊 = Musik läuft · „🎵 Musik an“ = Browser wartet auf einen Tipp · 🔇 = bewusst aus
 const paintMute = () => {
-  muteBtn.textContent = muted ? '🔇' : '🔊';
-  muteBtn.setAttribute('aria-label', muted ? 'Musik und Ton an' : 'Musik und Ton aus');
-  muteBtn.title = muted ? 'Musik an' : 'Musik aus';
+  const playing = !bgm.paused;
+  muteBtn.classList.toggle('invite', !muted && !playing);
+  muteBtn.textContent = muted ? '🔇' : playing ? '🔊' : '🎵 Musik an';
+  const label = muted ? 'Musik und Ton einschalten' : playing ? 'Musik und Ton ausschalten' : 'Musik starten';
+  muteBtn.setAttribute('aria-label', label); muteBtn.title = label;
 };
-paintMute();
 muteBtn.onclick = e => {
   e.stopPropagation();
-  muted = !muted; store.set('wichteln:muted', muted); paintMute();
+  if (!muted && bgm.paused) { startMusic(); unlockAudio(); return; }   // noch blockiert → ein Tipp startet
+  muted = !muted; store.set('wichteln:muted', muted);
   if (muted) { scratchSound(0); stopMusic(); } else { startMusic(); unlockAudio(); }
+  paintMute();
 };
+['play', 'playing', 'pause'].forEach(ev => bgm.addEventListener(ev, paintMute));
+paintMute();
 // iPhone: auch bei Lautlos-Schalter abspielen (wie ein Video) – einmal, bevor irgendein Ton erzeugt wird
 try { if (navigator.audioSession) navigator.audioSession.type = 'playback'; } catch (e) {}
 function unlockAudio() {
@@ -810,14 +820,14 @@ function chime() {
 
 /* Musik: Spieluhr „Stille Nacht“ (F. X. Gruber, 1818 – gemeinfrei) als MP3-Schleife (gerendert mit tools/render_music.js).
    Als <audio> statt Web Audio, weil das am iPhone zuverlässig beim ersten Antippen startet und auch bei Lautlos-Schalter spielt. */
-const bgm = $('#bgm');
 try { if ('mediaSession' in navigator) navigator.mediaSession.metadata = new MediaMetadata({ title: 'Stille Nacht (Spieluhr)', artist: 'Wichteln' }); } catch (e) {}
 let musicWanted = false;
 function startMusic() {
   if (muted || document.visibilityState !== 'visible') return;
   musicWanted = true;
   if (!bgm.paused) return;
-  try { const p = bgm.play(); if (p && p.catch) p.catch(() => {}); } catch (e) {}
+  try { const p = bgm.play(); if (p && p.then) p.then(paintMute, paintMute); } catch (e) {}
+  paintMute();
 }
 function stopMusic() { musicWanted = false; bgm.pause(); }
 function duckMusic() { // nur am Desktop wirksam – iPhone ignoriert audio.volume
@@ -891,6 +901,7 @@ function confettiFrame() {
 })();
 
 route();
+startMusic();   // klappt nur, wenn der Browser es erlaubt – sonst lädt der Knopf mit „🎵 Musik an“ ein
 })();
 </script>
 </body>
